@@ -1,0 +1,21 @@
+{application, dikulanirc,
+ [
+  {description, "The framework for the DIKULAN irc bots"},
+  {vsn, "1.5.3"},
+  {registered, [
+      dikulanirc_node_manager,
+      dikulanirc_network_manager,
+      dikulanirc_bot_manager
+  ]},
+  {applications, [
+      kernel,
+      stdlib,
+      mnesia
+  ]},
+  {included_applications, [
+      mnesia
+  ]},
+  {mod, {dikulanirc_app, []}},
+  {env, []}
+ ]}.
+
