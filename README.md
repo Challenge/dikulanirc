@@ -60,6 +60,9 @@ Enables the given bot if it is disabled (otherwise nothing happens). Also starts
 bot_disable(BotId)
 Disables the given bot if it is enabled (otherwise nothing happens). Also stops the given bot.
 
+bot_restart(BotId)
+Restarts the given bot if it is enabled (otherwise nothing happens).
+
 bot_get_all()
 Fetches all the configured bots and print them to the erlang shell. (NOT IMPLEMENT YET!)
 ```

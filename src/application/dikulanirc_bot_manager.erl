@@ -177,6 +177,25 @@ handle_cast({bot_disable, BotId}, State) ->
             no_such_bot
     end,
     {noreply, State};
+handle_cast({bot_restart, BotId}, State) ->
+    error_logger:info_msg("[~s] bot_restart - BotId: ~s~n", [?MODULE, atom_to_list(BotId)]),
+    case get_bot_from_id(BotId) of
+        {ok, [Bot | _]} ->
+            {ok, EnabledBots} = fetch_bots(true),
+            EnabledBotIds = lists:map(fun(B) -> B#dikulanirc_bots.bot_id end, EnabledBots),
+            case lists:member(BotId, EnabledBotIds) of
+                true ->
+                    stop_bot(BotId),
+                    start_bot(BotId),
+                    error_logger:info_msg("[~s] bot_restart - Restarted bot with id: ~s~n", [?MODULE, atom_to_list(BotId)]);
+                false ->
+                    error_logger:info_msg("[~s] bot_restart - The given bot with id is disabled: ~s~n", [?MODULE, atom_to_list(BotId)])
+            end;
+        _ ->
+            error_logger:info_msg("[~s] bot_restart - No bot defined with id: ~s~n", [?MODULE, atom_to_list(BotId)]),
+            no_such_bot
+    end,
+    {noreply, State};
 handle_cast(Request, State) ->
     error_logger:info_msg("[~s] Unhandled Cast Request:~n~w~n", [?MODULE, Request]),
     {noreply, State}.

@@ -8,7 +8,8 @@
 -export([network_add/3, network_add/4, network_get_info/1]).
 
 %% API for bots
--export([bot_create/4, bot_delete/1, bot_add_admin/2, bot_remove_admin/2, bot_enable/1, bot_disable/1, bot_get_all/0]).
+-export([bot_create/4, bot_delete/1, bot_add_admin/2, bot_remove_admin/2, 
+    bot_enable/1, bot_disable/1, bot_restart/1, bot_get_all/0]).
 
 %% The managers
 -define(NODE_MANAGER, dikulanirc_node_manager).
@@ -66,7 +67,7 @@ bot_create(Network, Nick, Channels, Module) ->
 
 %%-----------------------------------------------------------------------------
 %% @spec bot_delete(BotId) -> void()
-%%    BotId = atom(), (should be encapsulated in quotes)
+%%    BotId = atom(), (should be encapsulated in single quotes)
 %% @doc See Readme.md
 %%-----------------------------------------------------------------------------
 bot_delete(BotId) ->
@@ -74,7 +75,7 @@ bot_delete(BotId) ->
 
 %%-----------------------------------------------------------------------------
 %% @spec bot_add_admin(BotId, Name) -> void()
-%%    BotId = atom(), (should be encapsulated in quotes)
+%%    BotId = atom(), (should be encapsulated in single quotes)
 %%    Name = string()
 %% @doc See Readme.md
 %%-----------------------------------------------------------------------------
@@ -83,7 +84,7 @@ bot_add_admin(BotId, Name) ->
 
 %%-----------------------------------------------------------------------------
 %% @spec bot_remove_admin(BotId, Name) -> void()
-%%    BotId = atom(), (should be encapsulated in quotes)
+%%    BotId = atom(), (should be encapsulated in single quotes)
 %%    Name = string()
 %% @doc See Readme.md
 %%-----------------------------------------------------------------------------
@@ -92,7 +93,7 @@ bot_remove_admin(BotId, Name) ->
 
 %%-----------------------------------------------------------------------------
 %% @spec bot_enable(BotId) -> void()
-%%    BotId = atom(), (should be encapsulated in quotes)
+%%    BotId = atom(), (should be encapsulated in single quotes)
 %% @doc See Readme.md
 %%-----------------------------------------------------------------------------
 bot_enable(BotId) ->
@@ -100,11 +101,19 @@ bot_enable(BotId) ->
 
 %%-----------------------------------------------------------------------------
 %% @spec bot_disable(BotId) -> void()
-%%    BotId = atom(), (should be encapsulated in quotes)
+%%    BotId = atom(), (should be encapsulated in single quotes)
 %% @doc See Readme.md
 %%-----------------------------------------------------------------------------
 bot_disable(BotId) ->
     ok = gen_server:cast({global, ?BOT_MANAGER}, {bot_disable, BotId}).
+
+%%-----------------------------------------------------------------------------
+%% @spec bot_disable(BotId) -> void()
+%%    BotId = atom(), (should be encapsulated in single quotes)
+%% @doc See Readme.md
+%%-----------------------------------------------------------------------------
+bot_restart(BotId) ->
+    ok = gen_server:cast({global, ?BOT_MANAGER}, {bot_restart, BotId}).
 
 %%-----------------------------------------------------------------------------
 %% @spec bot_get_all() -> ??? (NOT YET IMPLEMENTED CORRECTLY)

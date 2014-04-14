@@ -5,9 +5,6 @@
 -module(signup_bot).
 -behaviour(gen_fsm).
 
-%% Compile options
--compile({nowarn_unused_function, [{ is_normal_admin, 1 }] }).
-
 %% Includes for all bot types
 -include_lib("dikulanirc.hrl").
 -include_lib("db_records.hrl").
@@ -62,6 +59,10 @@ init([Bot, IrcRouterId]) ->
 %%-----------------------------------------------------------------------------
 handle_event({?EVENT_ADD_ADMIN, Name}, StateName, StateData) ->
     error_logger:info_msg("[~s] Adding '~s' as super admin~n", [?MODULE, Name]),
+    case is_normal_admin(Name) of
+        true -> remove_admin(?NORMAL_ADMIN, Name);
+        false -> pass
+    end,
     add_admin(?SUPER_ADMIN, Name),
     {next_state, StateName, StateData};
 handle_event({?EVENT_REMOVE_ADMIN, Name}, StateName, StateData) ->
