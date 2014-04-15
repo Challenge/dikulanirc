@@ -197,6 +197,10 @@ ready({?IRC_RECEIVE, {DateTime, Packet}}, State) ->
         _ ->
             {next_state, ready, State}
     end;
+ready({announcement, EventName}, State) ->
+    Bot = (State#state.bot),
+    Router = State#state.router,
+    send_annoncement_text(Bot, Router, EventName);
 ready(Request, State) ->
     Bot = State#state.bot,
     error_logger:info_msg("[~s] In state ~s, unknown request:~n~w~n", [get_bot_id(Bot), "ready", Request]),
@@ -229,7 +233,11 @@ init_database(Nodes) ->
         [{attributes, record_info(fields, signup_bot_admins)},
         {type, bag},
         {disc_copies, Nodes}]),
-    ok = mnesia:wait_for_tables([unique_ids, signup_bot_event, signup_bot_signups, signup_bot_admins], ?MNESIA_TIMEOUT).
+    mnesia:create_table(signup_bot_announcements,
+        [{attributes, record_info(fields, signup_bot_announcements)},
+        {type, set},
+        {disc_copies, Nodes}]),
+    ok = mnesia:wait_for_tables([unique_ids, signup_bot_event, signup_bot_signups, signup_bot_admins, signup_bot_announcements], ?MNESIA_TIMEOUT).
 
 %%-----------------------------------------------------------------------------
 %% @spec get_next_event_id() -> integer()
@@ -475,8 +483,11 @@ parse_request(Bot, Router, IrcData, "create " ++ Rest) ->
 parse_request(Bot, Router, IrcData, "delete " ++ Rest) ->
     error_logger:info_msg("[~s] Received a '~s' request with arguments: ~s~n", [get_bot_id(Bot), "delete", string:strip(Rest, both)]),
     delete_event(Router, IrcData, string:strip(Rest, both));
+parse_request(Bot, Router, IrcData, "deannounce " ++ Rest) ->
+    error_logger:info_msg("[~s] Received a '~s' request with arguments: ~s~n", [get_bot_id(Bot), "deannounce", string:strip(Rest, both)]),
+    deannounce_event(Router, IrcData, string:strip(Rest, both));
 parse_request(Bot, Router, IrcData, "designup " ++ Rest) ->
-    error_logger:info_msg("[~s] Received a '~s' request with arguments: ~s~n", [get_bot_id(Bot), "signup", string:strip(Rest, both)]),
+    error_logger:info_msg("[~s] Received a '~s' request with arguments: ~s~n", [get_bot_id(Bot), "designup", string:strip(Rest, both)]),
     designup_event(Router, IrcData, string:strip(Rest, both));
 parse_request(Bot, Router, IrcData, "help") ->
     error_logger:info_msg("[~s] Received a '~s' request~n", [get_bot_id(Bot), "help"]),
@@ -553,8 +564,9 @@ parse_admin_request(_Bot, Router, IrcData, _Request) ->
 %%    Bot = #dikulanirc_bots{}
 %%    Router = atom()
 %%    IrcData = #irc_data{}
-%%    EventName = Message = string()
-%% @doc Announce the message for the given event.
+%%    EventName = string()
+%%    Message = string()
+%% @doc Creates announcement for the given event (also makes the announcement).
 %%-----------------------------------------------------------------------------
 announce_event(Bot, Router, IrcData, EventName, Message) ->
     Q = qlc:q([E || E <- mnesia:table(signup_bot_event), E#signup_bot_event.name =:= EventName]),
@@ -565,9 +577,23 @@ announce_event(Bot, Router, IrcData, EventName, Message) ->
         [] ->
             irc_helper:privmsg(Router, {Destination, "An event with that name doesn't exist!"});
         [Event | _] ->
-            Owner = Event#signup_bot_event.owner,
-            send_message_to_all_channels(Bot, Router, "Announcement for event '" ++ EventName ++ "' (owner: " ++ Owner ++ "):"),
-            send_message_to_all_channels(Bot, Router, Message)
+            EventId = Event#signup_bot_event.event_id,
+            Announcement = #signup_bot_announcements{event_id = EventId, announcement = Message},
+            F = fun() -> mnesia:write(Announcement) end,
+            case mnesia:transaction(F) of
+                {atomic, ok} ->
+                    Sender = IrcData#irc_data.sender,
+                    Owner = Event#signup_bot_event.owner,
+                    case Owner =:= Sender orelse is_admin(Sender) of
+                        true ->
+                            irc_helper:privmsg(Router, {IrcData#irc_data.destination, "Announcement for event '" ++ EventName ++ "' sucessfully set."}),
+                            send_annoncement_text(Bot, Router, EventName);
+                        false ->
+                            irc_helper:privmsg(Router, {Destination, "Cannot create announcement for the given event, because you are not the owner or an admin!"})
+                    end;
+                _ ->
+                    irc_helper:privmsg(Router, {IrcData#irc_data.destination, "Unable to create the desired announcement."})
+            end
     end.
 
 %%-----------------------------------------------------------------------------
@@ -618,11 +644,44 @@ delete_event(Router, IrcData, EventName) ->
             Owner = Event#signup_bot_event.owner,
             case Owner =:= Sender orelse is_admin(Sender) of
                 true ->
-                    F = fun() -> mnesia:delete({signup_bot_event, Event#signup_bot_event.event_id}) end,
-                    {atomic, ok} = mnesia:transaction(F),
+                    F1 = fun() -> mnesia:delete({signup_bot_event, Event#signup_bot_event.event_id}) end,
+                    {atomic, ok} = mnesia:transaction(F1),
+                    F2 = fun() ->
+                        mnesia:delete({signup_bot_signups, Event#signup_bot_event.event_id}),
+                        mnesia:delete({signup_bot_announcements, Event#signup_bot_event.event_id})
+                    end,
+                    mnesia:transaction(F2),
                     irc_helper:privmsg(Router, {Destination, "Sucessfully deleted event '" ++ EventName ++ "'"});
                 false ->
                     irc_helper:privmsg(Router, {Destination, "Cannot delete the given event, because you are not the owner or an admin!"})
+            end
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @spec announce_event(Router, IrcData, EventName) -> void()
+%%    Router = atom()
+%%    IrcData = #irc_data{}
+%%    EventName = string()
+%% @doc Removes the announcement for the event.
+%%-----------------------------------------------------------------------------
+deannounce_event(Router, IrcData, EventName) ->
+    Q = qlc:q([E || E <- mnesia:table(signup_bot_event), E#signup_bot_event.name =:= EventName]),
+    {atomic, Result} = mnesia:transaction(fun() -> qlc:e(Q) end),
+    Destination = IrcData#irc_data.destination,
+    Sender = IrcData#irc_data.sender,
+    case Result of
+        % If R is an empty list, that means that there doesn't exist an event with that name.
+        [] ->
+            irc_helper:privmsg(Router, {Destination, "An event with that name doesn't exist!"});
+        [Event | _] ->
+            Owner = Event#signup_bot_event.owner,
+            case Owner =:= Sender orelse is_admin(Sender) of
+                true ->
+                    F = fun() -> mnesia:delete({signup_bot_announcements, Event#signup_bot_event.event_id}) end,
+                    {atomic, ok} = mnesia:transaction(F),
+                    irc_helper:privmsg(Router, {Destination, "Sucessfully deleted anouncement for event '" ++ EventName ++ "'"});
+                false ->
+                    irc_helper:privmsg(Router, {Destination, "Cannot delete the given announcement, because you are not the owner of the event or an admin!"})
             end
     end.
 
@@ -706,20 +765,26 @@ send_message_to_all_channels_helper([Head | Tail], Router, Message) ->
 %% @doc Send the documentation for the signup bot to destination
 %%-----------------------------------------------------------------------------
 send_signupbot_help(Bot, Router, Destination) ->
+    AnnouncementMinuteString = case ?SIGNUPBOT_ANNOUNCEMENT_DELAY_IN_MINUTES of
+        1 -> "minute";
+        Min when Min < 1 -> float_to_list(Min, [{decimals, 2}, compact]) ++ " minute";
+        _ -> float_to_list(?SIGNUPBOT_ANNOUNCEMENT_DELAY_IN_MINUTES, [{decimals, 2}, compact]) ++ " minutes"
+    end,
     case ?IRC_PRIVATE_COMMAND_SYMBOL of
         "" ->
             irc_helper:privmsg(Router, {Destination, "All commands written in a channel should be prefixed with '" ++ ?IRC_PUBLIC_COMMAND_SYMBOL ++ Bot#dikulanirc_bots.nick ++ "'."});
         _ ->
             irc_helper:privmsg(Router, {Destination, "All commands written in a channel should be prefixed with '" ++ ?IRC_PUBLIC_COMMAND_SYMBOL ++ Bot#dikulanirc_bots.nick ++ "' and private commands should be prefixed with '" ++ ?IRC_PRIVATE_COMMAND_SYMBOL ++ "'."})
-        end,
+    end,
     irc_helper:privmsg(Router, {Destination, "The following commands are available for normal users:"}),
-    irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "announce <event name> :<message> - Sends an announcement with message for the given event to all channels."}),
+    irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "announce <event name> :<message> - Sends an announcement with message for the given event to all channels each " ++ AnnouncementMinuteString ++ " (you must be the owner of the event or admin to announce)."}),
     irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "create <event name> :<description> - Creates a new event with the given name and description."}),
-    irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "delete <event name> - Deletes the given event. You must be the owner of the event or admin to delete an event."}),
+    irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "delete <event name> - Deletes the given event (you must be the owner of the event or admin to delete an event)."}),
+    irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "deannounce <event name> - Removes the announcement for the given event (you must be the owner of the event or admin to deannounce)."}),
     irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "designup <event name> - Removes your sign up for the given event."}),
-    irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "help - Shows the help information (this)."}),
+    irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "help - Shows the help information (this information)."}),
     irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "list - List all events and registered users for the events."}),
-    irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "signup <event name> :<bord nummer> - Sign up for the given event."}),
+    irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "signup <event name> - Sign up for the given event."}),
     irc_helper:privmsg(Router, {Destination, "The following commands are available to administrators:"}),
     irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "add <name> - Adds the given name (which should be the nick of the user) as normal admin."}),
     irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "list - List all the admins, both super and normal admins."}),
@@ -795,6 +860,41 @@ send_signupbot_list_to_irc_users_helper(Router, Destination, Users, Res, 0, MaxI
     send_signupbot_list_to_irc_users_helper(Router, Destination, Users, ?IRC_TAB ++ "", MaxIteration, MaxIteration);
 send_signupbot_list_to_irc_users_helper(Router, Destination, [Head | Tail], Res, Iteration, MaxIteration) ->
     send_signupbot_list_to_irc_users_helper(Router, Destination, Tail, Res ++ " " ++ Head, Iteration - 1, MaxIteration).
+
+%%-----------------------------------------------------------------------------
+%% @spec send_annoncement_text(Bot, Router, EventName) -> void()
+%%    Bot = #dikulanirc_bots{}
+%%    Router = atom()
+%%    EventName = string()
+%% @doc Sends the announcement to all channels the bot is part of
+%%-----------------------------------------------------------------------------
+send_annoncement_text(Bot, Router, EventName) ->
+    Q1 = qlc:q([E || E <- mnesia:table(signup_bot_event), E#signup_bot_event.name =:= EventName]),
+    {atomic, Result1} = mnesia:transaction(fun() -> qlc:e(Q1) end),
+    case Result1 of
+        % If R is an empty list, that means that there doesn't exist an event with that name.
+        [] ->
+            %% If the event does not exist, we just do nothing
+            %% This simply means that the event has been deleted in the meantime
+            pass;
+        [Event | _] ->
+            EventId = Event#signup_bot_event.event_id,
+            Owner = Event#signup_bot_event.owner,
+            Q2 = qlc:q([A || A <- mnesia:table(signup_bot_announcements), A#signup_bot_announcements.event_id =:= EventId]),
+            {atomic, Result2} = mnesia:transaction(fun() -> qlc:e(Q2) end),
+            case Result2 of
+                % If R is an empty list, that means that there doesn't exist an announcement with that name.
+                [] ->
+                    %% If the announcement does not exist, we just do nothing
+                    %% This simply means that the announcement has been deleted in the meantime
+                    pass;
+                [Announcement | _] ->
+                    Message = Announcement#signup_bot_announcements.announcement,
+                    send_message_to_all_channels(Bot, Router, "Announcement for event '" ++ EventName ++ "' (owner: " ++ Owner ++ "):"),
+                    send_message_to_all_channels(Bot, Router, ?IRC_TAB ++ Message),
+                    gen_fsm:send_event_after(?SIGNUPBOT_ANNOUNCEMENT_DELAY, {announcement, EventName})
+            end
+    end.
 
 
 

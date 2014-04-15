@@ -8,6 +8,13 @@
 -define(SUPER_ADMIN, super_admin).
 -define(NORMAL_ADMIN, normal_admin).
 
+%% Announcement delay
+-define(SIGNUPBOT_ANNOUNCEMENT_DELAY, 300000). % 5 Minutes
+-define(SIGNUPBOT_ANNOUNCEMENT_DELAY_IN_SECONDS, ?SIGNUPBOT_ANNOUNCEMENT_DELAY / 1000).
+-define(SIGNUPBOT_ANNOUNCEMENT_DELAY_IN_MINUTES, ?SIGNUPBOT_ANNOUNCEMENT_DELAY_IN_SECONDS / 60).
+
+
+
 %%---------------------------------------------------------------------
 %% @doc Used to store unique id's for auto increment feature
 %% Data Type: Id (set)
@@ -15,7 +22,9 @@
 %%    type: An identifier/type to store the id in (default is undefined)
 %%    id: The stored auto increment id (default is undefined)
 %%----------------------------------------------------------------------
--record(unique_ids, {type, id}).
+-record(unique_ids, {
+        type,
+        id}).
 
 %%---------------------------------------------------------------------
 %% @doc Used to store information about events
@@ -53,7 +62,21 @@
 %%        defined in the start of this file (default is undefined)
 %%    name: The name of the administrator (default is undefined)
 %%----------------------------------------------------------------------
--record(signup_bot_admins, {role, name}).
+-record(signup_bot_admins, {
+        role,
+        name}).
+
+%%---------------------------------------------------------------------
+%% @doc Used to store the announcements for events
+%% Data Type: Announcements (Set)
+%% where:
+%%    event_id: The id of the event (default is undefined)
+%%    announcement: The (complete) announcement text for the event (default is undefined)
+%%----------------------------------------------------------------------
+-record(signup_bot_announcements, {
+        event_id,
+        announcement}).
+
 
 
 
