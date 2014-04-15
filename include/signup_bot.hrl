@@ -13,7 +13,9 @@
 -define(SIGNUPBOT_ANNOUNCEMENT_DELAY_IN_SECONDS, ?SIGNUPBOT_ANNOUNCEMENT_DELAY / 1000).
 -define(SIGNUPBOT_ANNOUNCEMENT_DELAY_IN_MINUTES, ?SIGNUPBOT_ANNOUNCEMENT_DELAY_IN_SECONDS / 60).
 
-
+%% Login information
+-define(SIGNUPBOT_LOGIN_NICKNAME, "").
+-define(SIGNUPBOT_LOGIN_PASSWORD, "").
 
 %%---------------------------------------------------------------------
 %% @doc Used to store unique id's for auto increment feature

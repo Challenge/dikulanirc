@@ -96,10 +96,10 @@ Should be used when sending RAW IRC messages in order for them to be sent to the
 
 The bot should accept the following events (in all states state, i.e. handle_event/3 will be used):
 ```erlang
-?EVENT_ADD_ADMIN
+{?EVENT_ADD_ADMIN, Name}
 This event is sent when an admin should be added to the bot. How the bot stores this information is up to the individual bot.
 
-?EVENT_REMOVE_ADMIN
+{?EVENT_REMOVE_ADMIN, Name}
 This event is sent when an admin should be removed from the bot.
 ```
 
