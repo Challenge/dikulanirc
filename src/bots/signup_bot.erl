@@ -140,7 +140,15 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %%-----------------------------------------------------------------------------
 connecting(?IRC_CONNECTED, State) ->
     Bot = State#state.bot,
+    Router = State#state.router,
     ok = irc_helper:register(State#state.router, Bot#dikulanirc_bots.nick),
+    case ?SIGNUPBOT_LOGIN_NICKNAME =/= "" andalso ?SIGNUPBOT_LOGIN_PASSWORD =/= "" of
+        true ->
+            irc_helper:oper(Router, {?SIGNUPBOT_LOGIN_NICKNAME, ?SIGNUPBOT_LOGIN_PASSWORD});
+        _ ->
+            % No login information supplied, so skip this step.
+            pass
+    end,
     error_logger:info_msg("[~s] Switching state: connecting->registering~n", [get_bot_id(Bot)]),
     {next_state, registering, State};
 connecting(Request, State) ->
@@ -167,13 +175,6 @@ registering({?IRC_RECEIVE, {DateTime, Packet}}, State) ->
             {next_state, registering, NewState};
         ?R_WELCOME ->
             error_logger:info_msg("[~s] Switching state: registering->ready~n", [get_bot_id(Bot)]),
-            case ?SIGNUPBOT_LOGIN_NICKNAME =/= "" andalso ?SIGNUPBOT_LOGIN_PASSWORD =/= "" of
-                true ->
-                    irc_helper:oper(Router, {?SIGNUPBOT_LOGIN_NICKNAME, ?SIGNUPBOT_LOGIN_PASSWORD});
-                _ ->
-                    % No login information supplied, so skip this step.
-                    pass
-            end,
             irc_helper:join(Router, Bot#dikulanirc_bots.channels),
             {next_state, ready, State};
         _ ->

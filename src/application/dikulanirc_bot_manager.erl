@@ -283,7 +283,7 @@ start_bot(Bot) ->
 %% @doc Stops the given bot by killing the supervisor.
 %%-----------------------------------------------------------------------------
 stop_bot(Bot) ->
-    supervisor:stop_child({global, dikulanirc_sup}, Bot#dikulanirc_bots.bot_id),
+    supervisor:terminate_child({global, dikulanirc_sup}, Bot#dikulanirc_bots.bot_id),
     supervisor:delete_child({global, dikulanirc_sup}, Bot#dikulanirc_bots.bot_id),
     ok.
 
