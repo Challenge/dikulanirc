@@ -141,14 +141,7 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 connecting(?IRC_CONNECTED, State) ->
     Bot = State#state.bot,
     Router = State#state.router,
-    ok = irc_helper:register(State#state.router, Bot#dikulanirc_bots.nick),
-    case ?SIGNUPBOT_LOGIN_NICKNAME =/= "" andalso ?SIGNUPBOT_LOGIN_PASSWORD =/= "" of
-        true ->
-            irc_helper:oper(Router, {?SIGNUPBOT_LOGIN_NICKNAME, ?SIGNUPBOT_LOGIN_PASSWORD});
-        _ ->
-            % No login information supplied, so skip this step.
-            pass
-    end,
+    ok = irc_helper:register(Router, Bot#dikulanirc_bots.nick),
     error_logger:info_msg("[~s] Switching state: connecting->registering~n", [get_bot_id(Bot)]),
     {next_state, registering, State};
 connecting(Request, State) ->
@@ -175,6 +168,13 @@ registering({?IRC_RECEIVE, {DateTime, Packet}}, State) ->
             {next_state, registering, NewState};
         ?R_WELCOME ->
             error_logger:info_msg("[~s] Switching state: registering->ready~n", [get_bot_id(Bot)]),
+            case ?SIGNUPBOT_LOGIN_NICKNAME =/= "" andalso ?SIGNUPBOT_LOGIN_PASSWORD =/= "" of
+            true ->
+                irc_helper:oper(Router, {?SIGNUPBOT_LOGIN_NICKNAME, ?SIGNUPBOT_LOGIN_PASSWORD});
+            _ ->
+                % No login information supplied, so skip this step.
+                pass
+            end,
             irc_helper:join(Router, Bot#dikulanirc_bots.channels),
             {next_state, ready, State};
         _ ->
@@ -796,7 +796,8 @@ send_signupbot_help(Bot, Router, Destination) ->
     irc_helper:privmsg(Router, {Destination, "The following commands are available to administrators:"}),
     irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "add <name> - Adds the given name (which should be the nick of the user) as normal admin."}),
     irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "list - List all the admins, both super and normal admins."}),
-    irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "remove <name> - Removes the given name (which should be the nick of the user) as normal admin."}).
+    irc_helper:privmsg(Router, {Destination, ?IRC_TAB ++ "remove <name> - Removes the given name (which should be the nick of the user) as normal admin."}),
+    irc_helper:privmsg(Router, {Destination, " "}).
 
 %%-----------------------------------------------------------------------------
 %% @spec send_signupbot_invalid_command(Router, Destination) -> void()
