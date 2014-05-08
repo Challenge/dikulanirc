@@ -97,12 +97,12 @@ handle_cast({bot_create, Network, {Nick, Channels, Module}}, State) ->
     start_bot(Bot),
     NewState = State#state{ irc_bots = [State#state.irc_bots | Bot]},
     {noreply, NewState};
-handle_cast({bot_remove, BotId}, State) ->
+handle_cast({bot_delete, BotId}, State) ->
     error_logger:info_msg("[~s] bot_remove - BotId: ~s~n", [?MODULE, atom_to_list(BotId)]),
     case get_bot_from_id(BotId) of
         {ok, _} ->
             F = fun() -> mnesia:delete({dikulanirc_bots, BotId}) end,
-            {atomic, ok} = mnesia:transaction(F),
+            mnesia:transaction(F),
             error_logger:info_msg("[~s] bot_remove - Removed bot with id: ~s~n", [?MODULE, atom_to_list(BotId)]);
         _ ->
             error_logger:info_msg("[~s] bot_remove - No bot defined with id: ~s~n", [?MODULE, atom_to_list(BotId)]),
@@ -185,8 +185,8 @@ handle_cast({bot_restart, BotId}, State) ->
             EnabledBotIds = lists:map(fun(B) -> B#dikulanirc_bots.bot_id end, EnabledBots),
             case lists:member(BotId, EnabledBotIds) of
                 true ->
-                    stop_bot(BotId),
-                    start_bot(BotId),
+                    stop_bot(Bot),
+                    start_bot(Bot),
                     error_logger:info_msg("[~s] bot_restart - Restarted bot with id: ~s~n", [?MODULE, atom_to_list(BotId)]);
                 false ->
                     error_logger:info_msg("[~s] bot_restart - The given bot with id is disabled: ~s~n", [?MODULE, atom_to_list(BotId)])
